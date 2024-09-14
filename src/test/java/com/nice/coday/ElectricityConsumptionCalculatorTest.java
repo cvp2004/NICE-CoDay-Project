@@ -23,21 +23,26 @@ public class ElectricityConsumptionCalculatorTest {
 
     @Test
     public void test1() throws IOException {
-
+        System.out.println("1");
         Path chargingStationInfoPath = Paths.get("src/main/resources/TestCase1/ChargingStationInfo.csv");
         Path entryExitPointInfoPath = Paths.get("src/main/resources/TestCase1/EntryExitPointInfo.csv");
         Path timeToChargeVehicleInfoPath = Paths.get("src/main/resources/TestCase1/TimeToChargeVehicleInfo.csv");
         Path tripDetailsPath = Paths.get("src/main/resources/TestCase1/TripDetails.csv");
         Path vehicleTypeInfoPath = Paths.get("src/main/resources/TestCase1/VehicleTypeInfo.csv");
+        System.out.println("2");
 
         resourceInfo = new ResourceInfo(chargingStationInfoPath, entryExitPointInfoPath, timeToChargeVehicleInfoPath, tripDetailsPath, vehicleTypeInfoPath);
+        System.out.println("abc");
         ElectricityConsumptionCalculator analyzer = new ElectricityConsumptionCalculatorImpl();
+        System.out.println("1234");
         resultData = analyzer.calculateElectricityAndTimeConsumption(resourceInfo);
+        System.out.println("3");
 
         //Total Unit Consume by all vehicles
         double expectedTotalUnitsConsumed = 690.60; // The expected sum of all TotalUnitConsumed
         double actualTotalUnitsConsumed  = resultData.getConsumptionDetails().stream().mapToDouble(ConsumptionDetails::getTotalUnitConsumed).sum();
         Assert.assertEquals(expectedTotalUnitsConsumed, actualTotalUnitsConsumed, 1.0);
+        System.out.println("4");
 
         //Total Unit Consume by Vehicle Type V1
         double expectedTotalUnitsConsumedByV1 = 534.06; // The expected sum of TotalUnitConsumed for VehicleType "V1"
@@ -46,6 +51,7 @@ public class ElectricityConsumptionCalculatorTest {
                 .mapToDouble(ConsumptionDetails::getTotalUnitConsumed)
                 .sum();
         Assert.assertEquals(expectedTotalUnitsConsumedByV1, actualTotalUnitsConsumedByV1, 1.0);
+        System.out.println("5");
 
         //Total Unit Consume by Vehicle Type V2
         double expectedTotalUnitsConsumedByV2 = 156.53; // The expected sum of TotalUnitConsumed for VehicleType "V1"
@@ -54,21 +60,25 @@ public class ElectricityConsumptionCalculatorTest {
                 .mapToDouble(ConsumptionDetails::getTotalUnitConsumed)
                 .sum();
         Assert.assertEquals(expectedTotalUnitsConsumedByV2, actualTotalUnitsConsumedByV2, 1.0);
+        System.out.println("6");
 
         // Total Time required for charging Vehicle Type V2
         long expectedTotalTimeRequiredByV2 = 55022;
         long actualTotalTimeRequiredByV1 = resultData.getConsumptionDetails().stream().filter(cd -> cd.getVehicleType().equals("V2")).mapToLong(ConsumptionDetails::getTotalTimeRequired).sum();
         Assert.assertEquals(expectedTotalTimeRequiredByV2, actualTotalTimeRequiredByV1, 50);
+        System.out.println("7");
 
         //Total time required for charging any vehicle at Charging Station Ch2
         int expectedTotalTimeRequiredAtC2 = 10570;
         double actualTotalTimeRequiredAtC2 = resultData.getTotalChargingStationTime().get("C2");
         Assert.assertEquals(expectedTotalTimeRequiredAtC2, actualTotalTimeRequiredAtC2, 50);
+        System.out.println("8");
 
         //Total time required for charging any vehicle at Charging Station Ch10
         int expectedTotalTimeRequiredAtC10 = 46500;
         double actualTotalTimeRequiredAtC10 = resultData.getTotalChargingStationTime().get("C10");
         Assert.assertEquals(expectedTotalTimeRequiredAtC10, actualTotalTimeRequiredAtC10, 50);
+        System.out.println("9");
 
         //Number of trips finished by vehicle type V2
         long expectedNumberOfTripsFinished = 16;
@@ -76,6 +86,7 @@ public class ElectricityConsumptionCalculatorTest {
                 .map(ConsumptionDetails::getNumberOfTripsFinished)
                 .reduce(0L, Long::sum);
         Assert.assertEquals(expectedNumberOfTripsFinished, actualNumberOfTripsFinished, 0.0);
+        System.out.println("10");
     }
 
     @Test

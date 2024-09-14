@@ -1,5 +1,8 @@
 package com.nice.coday;
 
+import com.nice.coday.models.ChargingStationData;
+import com.nice.coday.models.VehicleData;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
