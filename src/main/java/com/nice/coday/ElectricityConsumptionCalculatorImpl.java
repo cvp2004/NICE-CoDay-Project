@@ -8,7 +8,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ElectricityConsumptionCalculatorImpl implements ElectricityConsumptionCalculator {
-
     private CSVReader csvReader = new CSVReader();
     private ArrayList<ChargingStation> chargingStationList = new ArrayList<>();
     private ArrayList<EntryExitPoint> entryExitPointList = new ArrayList<>();
@@ -18,119 +17,162 @@ public class ElectricityConsumptionCalculatorImpl implements ElectricityConsumpt
 
     @Override
     public ConsumptionResult calculateElectricityAndTimeConsumption(ResourceInfo resourceInfo) throws IOException {
-        System.out.println("inside");
+
         this.chargingStationList = csvReader.readChargingStations(resourceInfo.getChargingStationInfoPath());
         this.entryExitPointList = csvReader.readEntryExitPoints(resourceInfo.getEntryExitPointInfoPath());
         this.vehicleTypeList = csvReader.readVehicleTypes(resourceInfo.getVehicleTypeInfoPath());
         this.chargingTimeList = csvReader.readChargingTimes(resourceInfo.getTimeToChargeVehicleInfoPath());
         this.tripList = csvReader.readTrips(resourceInfo.getTripDetailsPath());
-        System.out.println("list Created");
 
-        // Maps to keep track of the results
-        System.out.println("output init started");
-        ArrayList<VehicleData> vehicleDataList = new ArrayList<>();
-        for(VehicleType vehicle : vehicleTypeList) {
-            vehicleDataList.add(new VehicleData(vehicle.getType()));
+        for(VehicleType v : vehicleTypeList) {
+            unitsConsumed.put(v.getType(), 0.0);
+            timeRequired.put(v.getType(), 0.0);
+            noOfTripsFinished.put(v.getType(), 0.0);
         }
-        Map<String, ChargingStationData> chargingStationDataMap = new HashMap<>();
-        System.out.println("output init completed");
 
-        // Process each trip
+        for (ChargingStation c : chargingStationList) chargeStationTotalTime.put(c.getName(), 0L);
 
-        System.out.println("Trip Loop Started");
-        for (Trip trip : tripList) {
-            System.out.println("Trip = " + trip.getId());
-            processTrip(trip, vehicleDataList, chargingStationDataMap);
-        }
-        System.out.println("Trip Loop Completed");
+        for (Trip trip : tripList) processTrip(trip);
 
-        // Create ConsumptionResult object
         ConsumptionResult result = new ConsumptionResult();
 
-        for (VehicleData vehicleData : vehicleDataList) {
-            ConsumptionDetails consumptionDetails = new ConsumptionDetails(vehicleData.getVehicleType(), vehicleData.getTotalEnergyConsumed(), (long) vehicleData.getTotalChargingTime(), (long) vehicleData.getNumberOfTrips());
-            result.getConsumptionDetails().add(consumptionDetails);
-        }
+         for (VehicleType v : vehicleTypeList) {
+             ConsumptionDetails details = new ConsumptionDetails(
+                      v.getType(),
+                      unitsConsumed.get(v.getType()),
+                      timeRequired.get(v.getType()).longValue(),
+                      noOfTripsFinished.get(v.getType()).longValue()
+              );
+              result.getConsumptionDetails().add(details);
+         }
 
-        for (Map.Entry<String, ChargingStationData> entry : chargingStationDataMap.entrySet()) {
-            result.totalChargingStationTime.put(entry.getKey(), entry.getValue().getTotalChargingTime());
-        }
+         for (ChargingStation c : chargingStationList) {
+             System.out.println("Charging Station: " + c.getName() + ", Total Time: " + chargeStationTotalTime.get(c.getName()));
+              result.getTotalChargingStationTime().put(c.getName(), chargeStationTotalTime.get(c.getName()));
+         }
 
         return result;
     }
 
-    private void processTrip(Trip trip, ArrayList<VehicleData> vehicleDataList, Map<String, ChargingStationData> chargingStationDataMap) {
+//    private void processTrip(Trip trip, ArrayList<VehicleData> vehicleDataList, Map<String, ChargingStationData> chargingStationDataMap) {
+//        // Fetch the required data once for readability and efficiency
+//        EntryExitPoint entryPoint = findEntryExitPoint(trip.getEntryPoint());
+//        EntryExitPoint exitPoint = findEntryExitPoint(trip.getExitPoint());
+//        VehicleType vehicleType = findVehicleType(trip.getVehicleType());
+//
+//        double remainingBatteryPercentage = trip.getRemainingBatteryPercentage();
+//        double mileagePerUnit = vehicleType.getMileage() / vehicleType.getNumberOfUnitsForFullyCharge();
+//        double totalDistance = exitPoint.getDistanceFromStart() - entryPoint.getDistanceFromStart();
+//
+//        // Calculate the initial battery range
+//        double initialBatteryRange = ((remainingBatteryPercentage * vehicleType.getNumberOfUnitsForFullyCharge())/100) * mileagePerUnit;
+//        double currentBatteryRange = initialBatteryRange;
+//
+//        // Pre-fetch reachable charging stations
+//        ArrayList<ChargingStation> reachableStations = getReachableChargingStations(entryPoint.getDistanceFromStart(), exitPoint.getDistanceFromStart());
+//
+//        // Initialize tracking variables
+//        double totalChargingTime = 0;
+//        double totalEnergyConsumed = 0;
+//
+//        // Loop to manage battery and charging
+//        while (currentBatteryRange < totalDistance) {
+//            ChargingStation lastReachableStation = getLastReachableStation(reachableStations, currentBatteryRange);
+//            if (lastReachableStation == null) {
+//                // If no station is reachable, the trip cannot be completed
+//                return;
+//            }
+//
+//            // Calculate the distance to the last reachable station
+//            double distanceToLastStation = lastReachableStation.getDistanceFromStart() - entryPoint.getDistanceFromStart();
+//
+//            // Calculate the energy to be added during charging
+//            double unitsToAdd = vehicleType.getNumberOfUnitsForFullyCharge() - (remainingBatteryPercentage * vehicleType.getNumberOfUnitsForFullyCharge() / 100);
+//            totalEnergyConsumed += unitsToAdd;
+//
+//            // Calculate the time required to charge at the last reachable station
+//            double chargingTime = unitsToAdd * findChargingTime(vehicleType.getType(), lastReachableStation.getName());
+//            totalChargingTime += chargingTime;
+//
+//            // Update vehicle and station data
+//            updateVehicleData(vehicleType.getType(), totalEnergyConsumed, totalChargingTime, vehicleDataList);
+//            updateChargingStationData(lastReachableStation.getName(), chargingTime, chargingStationDataMap);
+//
+//            // Update current battery range and remaining distance
+//            currentBatteryRange = vehicleType.getMileage();
+//            totalDistance -= distanceToLastStation;
+//
+//            // Update the entry point to the last reachable station
+//            entryPoint = new EntryExitPoint(entryPoint.getName(), lastReachableStation.getDistanceFromStart());
+//        }
+//
+//        // Final update for the trip data
+//        updateVehicleData(vehicleType.getType(), totalEnergyConsumed, totalChargingTime, vehicleDataList);
+//    }
+
+    Map<String, Double> unitsConsumed = new HashMap<>();
+    Map<String, Double> timeRequired = new HashMap<>();
+    Map<String, Double> noOfTripsFinished = new HashMap<>();
+    Map<String, Long> chargeStationTotalTime = new HashMap<>();
+
+    private void processTrip(Trip trip) {
         // Fetch the required data once for readability and efficiency
         EntryExitPoint entryPoint = findEntryExitPoint(trip.getEntryPoint());
         EntryExitPoint exitPoint = findEntryExitPoint(trip.getExitPoint());
         VehicleType vehicleType = findVehicleType(trip.getVehicleType());
 
-        double remainingBatteryPercentage = trip.getRemainingBatteryPercentage();
         double mileagePerUnit = vehicleType.getMileage() / vehicleType.getNumberOfUnitsForFullyCharge();
-        double totalDistance = exitPoint.getDistanceFromStart() - entryPoint.getDistanceFromStart();
+        double distanceToTravel = exitPoint.getDistanceFromStart() - entryPoint.getDistanceFromStart();
 
-        // Calculate the initial battery range
-        double initialBatteryRange = remainingBatteryPercentage * mileagePerUnit;
-        double currentBatteryRange = initialBatteryRange;
+        double remainingUnits = (vehicleType.getNumberOfUnitsForFullyCharge() * trip.getRemainingBatteryPercentage())/100;
+        double distanceCanTravel = remainingUnits * mileagePerUnit;
+        double currentPosition = entryPoint.getDistanceFromStart();
 
-        // Pre-fetch reachable charging stations
-        ArrayList<ChargingStation> reachableStations = getReachableChargingStations(entryPoint.getDistanceFromStart(), exitPoint.getDistanceFromStart());
+        while(true) {
+            ArrayList<ChargingStation> stations = getReachableChargingStations(entryPoint.getDistanceFromStart(), exitPoint.getDistanceFromStart());
 
-        // Initialize tracking variables
-        double totalChargingTime = 0;
-        double totalEnergyConsumed = 0;
-
-        // Loop to manage battery and charging
-        while (currentBatteryRange < totalDistance) {
-            ChargingStation lastReachableStation = getLastReachableStation(reachableStations, currentBatteryRange);
-            if (lastReachableStation == null) {
-                // If no station is reachable, the trip cannot be completed
+            if(distanceCanTravel + currentPosition >= exitPoint.getDistanceFromStart()) {
+                noOfTripsFinished.getOrDefault(vehicleType.getType(), 0.0);
+                noOfTripsFinished.merge(vehicleType.getType(), 1.0, Double::sum); // increment
                 return;
             }
 
-            // Calculate the distance to the last reachable station
-            double distanceToLastStation = lastReachableStation.getDistanceFromStart() - entryPoint.getDistanceFromStart();
+            ChargingStation lastReachableStation = getLastReachableStation(stations, distanceCanTravel + currentPosition);
 
-            // Calculate the energy to be added during charging
-            double unitsToAdd = vehicleType.getNumberOfUnitsForFullyCharge() - (remainingBatteryPercentage * vehicleType.getNumberOfUnitsForFullyCharge() / 100);
-            totalEnergyConsumed += unitsToAdd;
+            if(lastReachableStation == null)
+                return;
 
-            // Calculate the time required to charge at the last reachable station
-            double chargingTime = unitsToAdd * findChargingTime(vehicleType.getType(), lastReachableStation.getName());
-            totalChargingTime += chargingTime;
+            while(stations.get(0) != lastReachableStation) stations.remove(0); // removal of intermediate stations
 
-            // Update vehicle and station data
-            updateVehicleData(vehicleType.getType(), totalEnergyConsumed, totalChargingTime, vehicleDataList);
-            updateChargingStationData(lastReachableStation.getName(), chargingTime, chargingStationDataMap);
+            double distanceTravelled = lastReachableStation.getDistanceFromStart() - currentPosition;
+            double unitsUsed = distanceTravelled / mileagePerUnit;
+            currentPosition = lastReachableStation.getDistanceFromStart(); // change
 
-            // Update current battery range and remaining distance
-            currentBatteryRange = vehicleType.getMileage();
-            totalDistance -= distanceToLastStation;
+            distanceToTravel -= distanceTravelled; // update
 
-            // Update the entry point to the last reachable station
-            entryPoint = new EntryExitPoint(entryPoint.getName(), lastReachableStation.getDistanceFromStart());
+            double unitsToCharge = vehicleType.getNumberOfUnitsForFullyCharge() - remainingUnits;
+            remainingUnits = vehicleType.getNumberOfUnitsForFullyCharge(); // change
+            distanceCanTravel = vehicleType.getMileage() * remainingUnits; // change
+
+            unitsConsumed.merge((vehicleType.getType()), unitsToCharge, Double::sum); // increment
+            timeRequired.merge(vehicleType.getType(), unitsToCharge * findChargingTime(vehicleType.getType(), lastReachableStation.getName()), Double::sum); // increment
+
+            chargeStationTotalTime.merge(lastReachableStation.getName(), (long) (unitsToCharge * findChargingTime(vehicleType.getType(), lastReachableStation.getName())), Long::sum); // increment
         }
-
-        // Final update for the trip data
-        updateVehicleData(vehicleType.getType(), totalEnergyConsumed, totalChargingTime, vehicleDataList);
     }
-
 
     private EntryExitPoint findEntryExitPoint(String name) {
         return entryExitPointList.stream().filter(point -> point.getName().equals(name)).findFirst().get();
     }
-
     private VehicleType findVehicleType(String type) {
         return vehicleTypeList.stream().filter(vehicle -> vehicle.getType().equals(type)).findFirst().get();
     }
-
     private double findChargingTime(String vehicleType, String stationName) {
         return chargingTimeList.stream()
                 .filter(chargingTime -> chargingTime.getVehicleType().equals(vehicleType) && chargingTime.getChargingStation().equals(stationName))
                 .findFirst().get()
                 .getTimeToChargePerUnit();
     }
-
     private ArrayList<ChargingStation> getReachableChargingStations(double start, double end) {
         ArrayList<com.nice.coday.models.ChargingStation> stations = new ArrayList<>();
         for (com.nice.coday.models.ChargingStation station : chargingStationList) {
@@ -140,7 +182,6 @@ public class ElectricityConsumptionCalculatorImpl implements ElectricityConsumpt
         }
         return stations;
     }
-
     private ChargingStation getLastReachableStation(ArrayList<com.nice.coday.models.ChargingStation> stations, double batteryRange) {
         for (int i = stations.size() - 1; i >= 0; i--) {
             if (stations.get(i).getDistanceFromStart() <= batteryRange) {
@@ -149,24 +190,6 @@ public class ElectricityConsumptionCalculatorImpl implements ElectricityConsumpt
         }
         return null;
     }
-
-    private void updateVehicleData(String vehicleType, double energyConsumed, double chargingTime, ArrayList<VehicleData> vehicleDataList) {
-        VehicleData data = vehicleDataList.stream().filter(v -> v.getVehicleType().equals(vehicleType)).findFirst().orElse(null);
-        if (data == null) {
-            data = new VehicleData(vehicleType);
-            vehicleDataList.add(data);
-        }
-        data.addEnergyConsumed(energyConsumed);
-        data.addChargingTime(chargingTime);
-        data.incrementTrips();
-    }
-
-    private void updateChargingStationData(String stationName, double chargingTime, Map<String, ChargingStationData> chargingStationDataMap) {
-        ChargingStationData data = chargingStationDataMap.getOrDefault(stationName, new ChargingStationData(stationName));
-        data.addChargingTime(chargingTime);
-        chargingStationDataMap.put(stationName, data);
-    }
-
     public void showData() {
         System.out.println("Charging Stations:");
         for (ChargingStation station : chargingStationList) {

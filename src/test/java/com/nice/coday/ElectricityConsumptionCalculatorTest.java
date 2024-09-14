@@ -51,7 +51,6 @@ public class ElectricityConsumptionCalculatorTest {
                 .mapToDouble(ConsumptionDetails::getTotalUnitConsumed)
                 .sum();
         Assert.assertEquals(expectedTotalUnitsConsumedByV1, actualTotalUnitsConsumedByV1, 1.0);
-        System.out.println("5");
 
         //Total Unit Consume by Vehicle Type V2
         double expectedTotalUnitsConsumedByV2 = 156.53; // The expected sum of TotalUnitConsumed for VehicleType "V1"
