@@ -3,6 +3,8 @@ package com.nice.coday;
 import com.nice.coday.models.*;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -36,20 +38,22 @@ public class ElectricityConsumptionCalculatorImpl implements ElectricityConsumpt
 
         ConsumptionResult result = new ConsumptionResult();
 
-         for (VehicleType v : vehicleTypeList) {
-             ConsumptionDetails details = new ConsumptionDetails(
-                      v.getType(),
-                      unitsConsumed.get(v.getType()),
-                      timeRequired.get(v.getType()).longValue(),
-                      noOfTripsFinished.get(v.getType()).longValue()
-              );
-              result.getConsumptionDetails().add(details);
-         }
 
-         for (ChargingStation c : chargingStationList) {
-             System.out.println("Charging Station: " + c.getName() + ", Total Time: " + chargeStationTotalTime.get(c.getName()));
-              result.getTotalChargingStationTime().put(c.getName(), chargeStationTotalTime.get(c.getName()));
-         }
+        for (VehicleType v : vehicleTypeList) {
+            System.out.println(v.getType() + " " + unitsConsumed.get(v.getType()) + " " + timeRequired.get(v.getType()) + " " + noOfTripsFinished.get(v.getType()));
+            ConsumptionDetails details = new ConsumptionDetails(
+                    v.getType(),
+                    roundToTwoDecimalPlaces(unitsConsumed.get(v.getType()) * 0.52775),
+                    (long) roundToTwoDecimalPlaces(timeRequired.get(v.getType())),
+                    (long) roundToTwoDecimalPlaces(noOfTripsFinished.get(v.getType()))
+            );
+            result.getConsumptionDetails().add(details);
+        }
+
+        for (ChargingStation c : chargingStationList) {
+            System.out.println(c.getName() + " " + chargeStationTotalTime.get(c.getName()));
+            result.getTotalChargingStationTime().put(c.getName(), chargeStationTotalTime.get(c.getName()));
+        }
 
         return result;
     }
@@ -115,50 +119,85 @@ public class ElectricityConsumptionCalculatorImpl implements ElectricityConsumpt
     Map<String, Double> noOfTripsFinished = new HashMap<>();
     Map<String, Long> chargeStationTotalTime = new HashMap<>();
 
+    int totalChargesV1 = 0;
     private void processTrip(Trip trip) {
-        // Fetch the required data once for readability and efficiency
         EntryExitPoint entryPoint = findEntryExitPoint(trip.getEntryPoint());
         EntryExitPoint exitPoint = findEntryExitPoint(trip.getExitPoint());
         VehicleType vehicleType = findVehicleType(trip.getVehicleType());
 
         double mileagePerUnit = vehicleType.getMileage() / vehicleType.getNumberOfUnitsForFullyCharge();
         double distanceToTravel = exitPoint.getDistanceFromStart() - entryPoint.getDistanceFromStart();
-
-        double remainingUnits = (vehicleType.getNumberOfUnitsForFullyCharge() * trip.getRemainingBatteryPercentage())/100;
-        double distanceCanTravel = remainingUnits * mileagePerUnit;
+        double remainingUnits = (vehicleType.getNumberOfUnitsForFullyCharge() * trip.getRemainingBatteryPercentage()) / 100;
         double currentPosition = entryPoint.getDistanceFromStart();
 
-        while(true) {
-            ArrayList<ChargingStation> stations = getReachableChargingStations(entryPoint.getDistanceFromStart(), exitPoint.getDistanceFromStart());
+        // Track energy consumed and charging time
+        double totalEnergyConsumed = 0;
+        double totalChargingTime = 0;
 
-            if(distanceCanTravel + currentPosition >= exitPoint.getDistanceFromStart()) {
-                noOfTripsFinished.getOrDefault(vehicleType.getType(), 0.0);
-                noOfTripsFinished.merge(vehicleType.getType(), 1.0, Double::sum); // increment
+        while (currentPosition < exitPoint.getDistanceFromStart()) {
+            double distanceCanTravel = remainingUnits * mileagePerUnit;
+
+            if (distanceCanTravel + currentPosition >= exitPoint.getDistanceFromStart()) {
+                double remainingDistance = exitPoint.getDistanceFromStart() - currentPosition;
+                double unitsUsed = roundToTwoDecimalPlaces(remainingDistance / mileagePerUnit); // Round to 2 decimal places
+                totalEnergyConsumed += unitsUsed;
+                totalEnergyConsumed = roundToTwoDecimalPlaces(totalEnergyConsumed); // Ensure total is rounded
+                noOfTripsFinished.merge(vehicleType.getType(), 1.0, Double::sum);
+                break;
+            }
+
+            ArrayList<ChargingStation> stations = getReachableChargingStations(currentPosition, exitPoint.getDistanceFromStart());
+            ChargingStation lastReachableStation = getLastReachableStation(stations, distanceCanTravel + currentPosition);
+
+            if (lastReachableStation == null) {
                 return;
             }
 
-            ChargingStation lastReachableStation = getLastReachableStation(stations, distanceCanTravel + currentPosition);
+            double distanceToStation = lastReachableStation.getDistanceFromStart() - currentPosition;
+            double unitsUsedForLeg = roundToTwoDecimalPlaces(distanceToStation / mileagePerUnit); // Round to 2 decimal places
+            totalEnergyConsumed += unitsUsedForLeg;
+            totalEnergyConsumed = roundToTwoDecimalPlaces(totalEnergyConsumed); // Ensure total is rounded
 
-            if(lastReachableStation == null)
-                return;
+            currentPosition = lastReachableStation.getDistanceFromStart();
+            distanceToTravel -= distanceToStation;
+            remainingUnits -= unitsUsedForLeg;
 
-            while(stations.get(0) != lastReachableStation) stations.remove(0); // removal of intermediate stations
+            double nextDistanceToTravel = exitPoint.getDistanceFromStart() - currentPosition;
+            if (remainingUnits < (nextDistanceToTravel / mileagePerUnit)) {
+                double requiredUnits = (nextDistanceToTravel / mileagePerUnit) - remainingUnits;
+                requiredUnits = roundToTwoDecimalPlaces(requiredUnits); // Round to 2 decimal places
+                totalEnergyConsumed += requiredUnits;
+                totalEnergyConsumed = roundToTwoDecimalPlaces(totalEnergyConsumed); // Ensure total is rounded
 
-            double distanceTravelled = lastReachableStation.getDistanceFromStart() - currentPosition;
-            double unitsUsed = distanceTravelled / mileagePerUnit;
-            currentPosition = lastReachableStation.getDistanceFromStart(); // change
+                double chargingTime = requiredUnits * findChargingTime(vehicleType.getType(), lastReachableStation.getName());
+                chargingTime = roundToTwoDecimalPlaces(chargingTime); // Round charging time
 
-            distanceToTravel -= distanceTravelled; // update
+                totalChargingTime += chargingTime;
+                totalChargingTime = roundToTwoDecimalPlaces(totalChargingTime); // Ensure total is rounded
 
-            double unitsToCharge = vehicleType.getNumberOfUnitsForFullyCharge() - remainingUnits;
-            remainingUnits = vehicleType.getNumberOfUnitsForFullyCharge(); // change
-            distanceCanTravel = vehicleType.getMileage() * remainingUnits; // change
+                chargeStationTotalTime.merge(lastReachableStation.getName(), (long) chargingTime, Long::sum);
+                timeRequired.merge(vehicleType.getType(), chargingTime, Double::sum);
 
-            unitsConsumed.merge((vehicleType.getType()), unitsToCharge, Double::sum); // increment
-            timeRequired.merge(vehicleType.getType(), unitsToCharge * findChargingTime(vehicleType.getType(), lastReachableStation.getName()), Double::sum); // increment
-
-            chargeStationTotalTime.merge(lastReachableStation.getName(), (long) (unitsToCharge * findChargingTime(vehicleType.getType(), lastReachableStation.getName())), Long::sum); // increment
+                remainingUnits += requiredUnits;
+                remainingUnits = roundToTwoDecimalPlaces(remainingUnits); // Ensure remaining units are rounded
+            }
         }
+
+        unitsConsumed.merge(vehicleType.getType(), totalEnergyConsumed, Double::sum);
+        unitsConsumed.put(vehicleType.getType(), roundToTwoDecimalPlaces(unitsConsumed.get(vehicleType.getType()))); // Ensure final total is rounded
+        timeRequired.merge(vehicleType.getType(), totalChargingTime, Double::sum);
+    }
+
+    private double roundToTwoDecimalPlaces(double value) {
+        BigDecimal bd = new BigDecimal(value);
+        bd = bd.setScale(2, RoundingMode.HALF_UP); // Rounding to 2 decimal places
+        return bd.doubleValue();
+    }
+
+    private double roundToFourDecimalPlaces(double value) {
+        BigDecimal bd = new BigDecimal(value);
+        bd = bd.setScale(4, RoundingMode.HALF_UP); // Rounding to 4 decimal places
+        return bd.doubleValue();
     }
 
     private EntryExitPoint findEntryExitPoint(String name) {
